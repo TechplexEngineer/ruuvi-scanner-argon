@@ -1,3 +1,4 @@
 target
 lib
 *.state.json
+main.cpp
