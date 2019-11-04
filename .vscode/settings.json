@@ -1,0 +1,18 @@
+{
+    "extensions.ignoreRecommendations": true,
+    "C_Cpp.default.configurationProvider": "particle.particle-vscode-core",
+    "cortex-debug.openocdPath": "${command:particle.getDebuggerOpenocdPath}",
+    "files.associations": {
+        "*.ino": "cpp",
+        "array": "cpp",
+        "*.tcc": "cpp",
+        "functional": "cpp",
+        "future": "cpp",
+        "istream": "cpp",
+        "tuple": "cpp",
+        "utility": "cpp"
+    },
+    "particle.firmwareVersion": "1.4.2",
+    "particle.targetPlatform": "argon",
+    "particle.targetDevice": "Blake_roadshow"
+}
