@@ -1,7 +1,9 @@
 
 #include "Particle.h"
-#include <ArduinoJson.h>
 #include <unordered_map>
+#include "Base64RK.h"
+#include "JsonParserGeneratorRK.h"
+
 
 // This example does not require the cloud so you can run it in manual mode or
 // normal cloud-connected mode
@@ -16,6 +18,7 @@ int scanResultsSize = 0;
     *     - BLE_SCAN_TYPE
     *           0x00: Passive scanning, no scan request packets shall be sent.(default)
     *           0x01: Active scanning, scan request packets may be sent.
+    * 
     *           0x02 - 0xFF: Reserved for future use.
     *     - BLE_SCAN_INTERVAL: This is defined as the time interval from when the Controller started its last LE scan until it begins the subsequent LE scan.
     *           Range: 0x0004 to 0x4000
@@ -34,6 +37,7 @@ int scanResultsSize = 0;
 	const uint16_t BLE_SCAN_TIMEOUT =     		10;    // 100 ms (10 units of 10 ms)
 
 bool isScanning = false;
+static bool doPublish = false;
 
 const uint16_t ESTIMOTE_MFCT_UUID    = 0x015d;
 const uint16_t ESTIMOTE_SERVICE_UUID = 0xfe9a;
@@ -43,6 +47,13 @@ const uint16_t RUUVI_MFCT_UUID       = 0x0499;
 
 const uint16_t APRIL_MFCT_UUID       = 0xfe59;
 // const uint16_t APRIL_SERVICE_UUID    = 0x;
+
+void timer_handler()
+{
+    doPublish = true;
+}
+Timer timer(1000 * 1, timer_handler);
+
 
 void setup() {
     Serial.println("test");
@@ -64,7 +75,6 @@ void setup() {
     scanParams.window = 	BLE_SCAN_WINDOW;
     scanParams.timeout = 	BLE_SCAN_TIMEOUT;
     BLE.setScanParameters (&scanParams);
-
 }
 
 // Cloud functions must return int and take a String
@@ -76,6 +86,7 @@ int doScan(String extra) {
 
 int startScan(String extra) {
     Serial.println("Starting Scan");
+    timer.start();
     isScanning = true;
     return 0;
 }
@@ -86,28 +97,30 @@ double convertToGs(int16_t raw)
     double val = raw;
     return val / 1000;
 }
-// auto parser_map_t = std::unordered_map<uint16_t, IParser::ptr_t>;
+
+// class ruuvi_data {
+//     int8_t rssi;
+//     uint16_t mfgid;
+//     uint8_t protocol_version;
+//     double humidity_rh;
+//     double temp_c;
+//     double pressure_hpa;
+//     double accel_x;
+//     double accel_y;
+//     double accel_z;
+//     double battery;
+    
+//     // String toJson() {
+//     //     String out = "";
+//     //     out += "{";
+
+//     // }
+// }
+
+std::unordered_map<std::string, std::string> advert_map;
 
 void scanResultCallback(const BleScanResult *scanResult, void *context) {
     
-    // String name = scanResult->advertisingData.deviceName();
-    // if (name.length() > 0) {
-    //     Serial.printlnf(" | deviceName: %s", name.c_str());
-    // } else {
-    //     Serial.println("");
-    // }
-
-    // uint8_t service[2];
-    // scanResult->advertisingData.get(
-    //             BleAdvertisingDataType::SERVICE_UUID_16BIT_COMPLETE,
-    //             service,
-    //             2);
-    // BleUuid serviceUUID(service[0] | (service[1] << 8));   
-    // Serial.printf(" | Svc %s", serviceUUID.toString().c_str());
-    
-
-    // 
-
     uint8_t data[BLE_MAX_ADV_DATA_LEN];
     size_t len = scanResult->advertisingData.get(
                 BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA,
@@ -130,27 +143,33 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
 
     if (mfgid == RUUVI_MFCT_UUID) {
         Serial.printlnf("FOUND A RUUVI");
-        Serial.printlnf("  MAC: %s", scanResult->address.toString().c_str());
-        Serial.printlnf("  RSSI: %ddBm", scanResult->rssi);
-        Serial.printlnf("  MFG %04X", mfgid);
-        Serial.printlnf("  HDR %02x", data[2+0]);
-        double humidity_rh = data[2+1] * 0.5;
-        Serial.printlnf("  HUM %f %%RH", humidity_rh);
-        double temp_c = 0;
-        temp_c += (int8_t)data[2+2]; //msb is sign
-        temp_c += (data[2+3]/100.0);
-        Serial.printlnf("  TMP %f C", temp_c);
+        static String dat = Base64::encodeToString(data, len);
+        if (advert_map.size() >= 15) {
+            Serial.println("OVERFLOW!");
+        } else {
+            advert_map.insert({std::string(scanResult->address.toString()), std::string(dat)});
+        }
+        // Serial.printlnf("  MAC: %s", scanResult->address.toString().c_str());
+        // Serial.printlnf("  RSSI: %ddBm", scanResult->rssi);
+        // Serial.printlnf("  MFG %04X", mfgid);
+        // Serial.printlnf("  HDR %02x", data[2+0]);
+        // double humidity_rh = data[2+1] * 0.5;
+        // Serial.printlnf("  HUM %f %%RH", humidity_rh);
+        // double temp_c = 0;
+        // temp_c += (int8_t)data[2+2]; //msb is sign
+        // temp_c += (data[2+3]/100.0);
+        // Serial.printlnf("  TMP %f C", temp_c);
     
-        uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
-        pressure_pa += 50000;
-        double pressure_hpa = pressure_pa/100.0; //hPa
-        Serial.printlnf("  PRE %f hpa", pressure_hpa );
-        Serial.printlnf("  ACX %f", convertToGs((data[2+6] << 8)  | data[2+7]));
-        Serial.printlnf("  ACY %f", convertToGs((data[2+8] << 8)  | data[2+9]));
-        Serial.printlnf("  ACZ %f", convertToGs((data[2+10] << 8) | data[2+11]));
-        Serial.printlnf("  BAT %f", ((data[2+12] << 8) | data[2+13])/1000.0);
+        // uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
+        // pressure_pa += 50000;
+        // double pressure_hpa = pressure_pa/100.0; //hPa
+        // Serial.printlnf("  PRE %f hpa", pressure_hpa );
+        // Serial.printlnf("  ACX %f", convertToGs((data[2+6] << 8)  | data[2+7]));
+        // Serial.printlnf("  ACY %f", convertToGs((data[2+8] << 8)  | data[2+9]));
+        // Serial.printlnf("  ACZ %f", convertToGs((data[2+10] << 8) | data[2+11]));
+        // Serial.printlnf("  BAT %f", ((data[2+12] << 8) | data[2+13])/1000.0);
 
-        Serial.println("");
+        // Serial.println("");
     }
 }
 
@@ -158,10 +177,9 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
 int stopScan(String extra) {
     Serial.println("Stopping Scan");
     isScanning = false;
+    timer.stop();
     return BLE.stopScanning();
 }
-
-
 
 
 uint8_t buf[BLE_MAX_ADV_DATA_LEN];
@@ -170,6 +188,25 @@ void loop() {
 
     if (isScanning) {
         BLE.scan(scanResultCallback, NULL);
+    }
+
+    if (doPublish) {
+        doPublish = false;
+
+        JsonWriterStatic<256> jw;
+
+        {
+            JsonWriterAutoObject obj(&jw);
+            for (const auto &pair : advert_map) {
+                jw.insertKeyValue(pair.first.c_str(), pair.second.c_str());
+            }
+        }
+
+
+        Serial.printlnf("publish  %d", advert_map.size());
+        Serial.printlnf(jw.getBuffer());
+        Particle.publish("/putney/ruuvi", jw.getBuffer(), PRIVATE);
+        advert_map.clear();
     }
 
     // if (scanResultsSize)
