@@ -36,7 +36,7 @@ int scanResultsSize = 0;
 	const uint16_t BLE_SCAN_WINDOW =     		0x0A0; // 100 ms
 	const uint16_t BLE_SCAN_TIMEOUT =     		10;    // 100 ms (10 units of 10 ms)
 
-bool isScanning = false;
+bool isScanning = true;
 static bool doPublish = false;
 
 const uint16_t ESTIMOTE_MFCT_UUID    = 0x015d;
@@ -79,14 +79,12 @@ void setup() {
 
 // Cloud functions must return int and take a String
 int doScan(String extra) {
-    int count = BLE.scan(scanResults, SCAN_RESULT_MAX);
-    scanResultsSize = count;
-    return count;
+    // int count = BLE.scan(scanResults, SCAN_RESULT_MAX);
+    // scanResultsSize = count;
+    return BLE_GAP_ADV_SET_DATA_SIZE_MAX;
 }
 
 int startScan(String extra) {
-    Serial.println("Starting Scan");
-    timer.start();
     isScanning = true;
     return 0;
 }
@@ -98,30 +96,11 @@ double convertToGs(int16_t raw)
     return val / 1000;
 }
 
-// class ruuvi_data {
-//     int8_t rssi;
-//     uint16_t mfgid;
-//     uint8_t protocol_version;
-//     double humidity_rh;
-//     double temp_c;
-//     double pressure_hpa;
-//     double accel_x;
-//     double accel_y;
-//     double accel_z;
-//     double battery;
-    
-//     // String toJson() {
-//     //     String out = "";
-//     //     out += "{";
-
-//     // }
-// }
-
 std::unordered_map<std::string, std::string> advert_map;
 
 void scanResultCallback(const BleScanResult *scanResult, void *context) {
     
-    uint8_t data[BLE_MAX_ADV_DATA_LEN];
+    uint8_t data[BLE_MAX_ADV_DATA_LEN+10];
     size_t len = scanResult->advertisingData.get(
                 BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA,
                 data,
@@ -140,17 +119,49 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
     }
     uint16_t mfgid = data[0] | (data[1] << 8);
     
-
     if (mfgid == RUUVI_MFCT_UUID) {
         Serial.printlnf("FOUND A RUUVI");
-        static String dat = Base64::encodeToString(data, len);
+        
         if (advert_map.size() >= 15) {
             Serial.println("OVERFLOW!");
         } else {
-            advert_map.insert({std::string(scanResult->address.toString()), std::string(dat)});
+            // scanResult->rssi
+            // JsonWriterStatic<256> jw;
+            // {
+            //     JsonWriterAutoObject obj(&jw);
+            //     jw.insertKeyValue("rssi", scanResult->rssi);
+            //     jw.insertKeyValue("mfg", mfgid); //HEX
+            //     jw.insertKeyValue("hdr", data[2+0]);//HEX
+            //     jw.insertKeyValue("humidity_rh", data[2+1] * 0.5);
+            //     double temp_c = 0;
+            //     temp_c += (int8_t)data[2+2]; //msb is sign
+            //     temp_c += (data[2+3]/100.0);
+            //     jw.insertKeyValue("temp_c", temp_c);
+            //     uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
+            //     pressure_pa += 50000;
+            //     double pressure_hpa = pressure_pa/100.0; //hPa
+            //     jw.insertKeyValue("pressure_hpa", pressure_hpa);
+                
+            //     jw.insertKeyValue("accelx_g", convertToGs((data[2+6] << 8)  | data[2+7]));
+            //     jw.insertKeyValue("accely_g", convertToGs((data[2+8] << 8)  | data[2+9]));
+            //     jw.insertKeyValue("accelz_g", convertToGs((data[2+10] << 8) | data[2+11]));
+
+            //     jw.insertKeyValue("battery_v", ((data[2+12] << 8) | data[2+13])/1000.0 );
+            // }
+            // jw.getBuffer()
+
+            if( (len +1) < (BLE_MAX_ADV_DATA_LEN+10) ) {
+                data[len] = scanResult->rssi;
+                len ++;
+            }
+            String dat = Base64::encodeToString(data, len);
+            advert_map.insert({
+                std::string(scanResult->address.toString()),
+                std::string(dat, strlen(dat))
+            });
         }
-        // Serial.printlnf("  MAC: %s", scanResult->address.toString().c_str());
-        // Serial.printlnf("  RSSI: %ddBm", scanResult->rssi);
+        Serial.printlnf("  MAC: %s", scanResult->address.toString().c_str());
+        Serial.printlnf("  RSSI: %ddBm", scanResult->rssi);
         // Serial.printlnf("  MFG %04X", mfgid);
         // Serial.printlnf("  HDR %02x", data[2+0]);
         // double humidity_rh = data[2+1] * 0.5;
@@ -177,7 +188,6 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
 int stopScan(String extra) {
     Serial.println("Stopping Scan");
     isScanning = false;
-    timer.stop();
     return BLE.stopScanning();
 }
 
@@ -187,7 +197,13 @@ void loop() {
     // Particle.publish("loop", PRIVATE);
 
     if (isScanning) {
+        Serial.println("Starting Scan");
+        if (!timer.isActive()) {
+            timer.start();
+        }
         BLE.scan(scanResultCallback, NULL);
+    } else {
+        timer.stop();
     }
 
     if (doPublish) {
@@ -205,7 +221,7 @@ void loop() {
 
         Serial.printlnf("publish  %d", advert_map.size());
         Serial.printlnf(jw.getBuffer());
-        Particle.publish("/putney/ruuvi", jw.getBuffer(), PRIVATE);
+        Particle.publish("/putney/main/ruuvi", jw.getBuffer(), PRIVATE);
         advert_map.clear();
     }
 
