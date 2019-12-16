@@ -12,6 +12,13 @@
 const size_t SCAN_RESULT_MAX = 30;
 
 BleScanResult scanResults[SCAN_RESULT_MAX];
+
+Timer timer(1000 * 1, timer_handler);
+std::unordered_map<std::string, std::string> advert_map;
+std::set<std::string> sentLastTime;
+std::set<std::string> sentTime;
+
+
 int scanResultsSize = 0;
     /*
     * BLE scan parameters:
@@ -52,7 +59,6 @@ void timer_handler()
 {
     doPublish = true;
 }
-Timer timer(1000 * 1, timer_handler);
 
 
 void setup() {
@@ -96,7 +102,7 @@ double convertToGs(int16_t raw)
     return val / 1000;
 }
 
-std::unordered_map<std::string, std::string> advert_map;
+
 
 void scanResultCallback(const BleScanResult *scanResult, void *context) {
 
@@ -125,31 +131,6 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
         if (advert_map.size() >= 15) {
             Serial.println("OVERFLOW!");
         } else {
-            // scanResult->rssi
-            // JsonWriterStatic<256> jw;
-            // {
-            //     JsonWriterAutoObject obj(&jw);
-            //     jw.insertKeyValue("rssi", scanResult->rssi);
-            //     jw.insertKeyValue("mfg", mfgid); //HEX
-            //     jw.insertKeyValue("hdr", data[2+0]);//HEX
-            //     jw.insertKeyValue("humidity_rh", data[2+1] * 0.5);
-            //     double temp_c = 0;
-            //     temp_c += (int8_t)data[2+2]; //msb is sign
-            //     temp_c += (data[2+3]/100.0);
-            //     jw.insertKeyValue("temp_c", temp_c);
-            //     uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
-            //     pressure_pa += 50000;
-            //     double pressure_hpa = pressure_pa/100.0; //hPa
-            //     jw.insertKeyValue("pressure_hpa", pressure_hpa);
-
-            //     jw.insertKeyValue("accelx_g", convertToGs((data[2+6] << 8)  | data[2+7]));
-            //     jw.insertKeyValue("accely_g", convertToGs((data[2+8] << 8)  | data[2+9]));
-            //     jw.insertKeyValue("accelz_g", convertToGs((data[2+10] << 8) | data[2+11]));
-
-            //     jw.insertKeyValue("battery_v", ((data[2+12] << 8) | data[2+13])/1000.0 );
-            // }
-            // jw.getBuffer()
-
             if( (len +1) < (BLE_MAX_ADV_DATA_LEN+10) ) {
                 data[len] = scanResult->rssi;
                 len ++;
@@ -160,27 +141,6 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
                 std::string(dat, strlen(dat))
             });
         }
-        Serial.printlnf("  MAC: %s", scanResult->address.toString().c_str());
-        Serial.printlnf("  RSSI: %ddBm", scanResult->rssi);
-        // Serial.printlnf("  MFG %04X", mfgid);
-        // Serial.printlnf("  HDR %02x", data[2+0]);
-        // double humidity_rh = data[2+1] * 0.5;
-        // Serial.printlnf("  HUM %f %%RH", humidity_rh);
-        // double temp_c = 0;
-        // temp_c += (int8_t)data[2+2]; //msb is sign
-        // temp_c += (data[2+3]/100.0);
-        // Serial.printlnf("  TMP %f C", temp_c);
-
-        // uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
-        // pressure_pa += 50000;
-        // double pressure_hpa = pressure_pa/100.0; //hPa
-        // Serial.printlnf("  PRE %f hpa", pressure_hpa );
-        // Serial.printlnf("  ACX %f", convertToGs((data[2+6] << 8)  | data[2+7]));
-        // Serial.printlnf("  ACY %f", convertToGs((data[2+8] << 8)  | data[2+9]));
-        // Serial.printlnf("  ACZ %f", convertToGs((data[2+10] << 8) | data[2+11]));
-        // Serial.printlnf("  BAT %f", ((data[2+12] << 8) | data[2+13])/1000.0);
-
-        // Serial.println("");
     }
 }
 
@@ -193,8 +153,11 @@ int stopScan(String extra) {
 
 
 uint8_t buf[BLE_MAX_ADV_DATA_LEN];
-void loop() {
-    // Particle.publish("loop", PRIVATE);
+void loop()
+{
+
+    int count = 0;
+    const int MAX_ADV_SEND = 3;
 
     if (isScanning) {
         Serial.println("Starting Scan");
@@ -215,6 +178,9 @@ void loop() {
             JsonWriterAutoObject obj(&jw);
             for (const auto &pair : advert_map) {
                 jw.insertKeyValue(pair.first.c_str(), pair.second.c_str());
+                if (++count >= MAX_ADV_SEND) {
+                    break;
+                }
             }
         }
 
@@ -224,54 +190,6 @@ void loop() {
         Particle.publish("/putney/main/ruuvi", jw.getBuffer(), PRIVATE);
         advert_map.clear();
     }
-
-    // if (scanResultsSize)
-    // {
-    //     Serial.println("Scan Results");
-
-    //     for (int i=0; i<scanResultsSize; i++) {
-
-    //         Serial.print(scanResults[i].address.toString());
-    //         Serial.print(" ");
-
-    //         scanResults[i].advertisingData.get(
-    //             BleAdvertisingDataType::SERVICE_UUID_16BIT_COMPLETE,
-    //             buf,
-    //             BLE_MAX_ADV_DATA_LEN);
-    //         // BleUuid()
-    //         Serial.print(buf[0], HEX);
-    //         Serial.print(" ");
-
-    //         Serial.println();
-
-
-    //     }
-
-    //     scanResultsSize = 0;
-    // }
-
-
-
-    // for (int ii = 0; ii < count; ii++) {
-    //     uint8_t buf[BLE_MAX_ADV_DATA_LEN];
-    //     size_t len;
-
-    //     // We're looking for devices that have a heart rate service (0x180D)
-    //     len = scanResults[ii].advertisingData.get(BleAdvertisingDataType::SERVICE_UUID_16BIT_COMPLETE, buf, BLE_MAX_ADV_DATA_LEN);
-    //     if (len > 0) {
-    //         //
-    //         for(size_t jj = 0; jj < len; jj += 2) {
-    //             if (*(uint16_t *)&buf[jj] == BLE_SIG_UUID_HEART_RATE_SVC) { // 0x180D
-    //                 // Found a device with a heart rate service
-
-    //                 Log.info("rssi=%d address=%02X:%02X:%02X:%02X:%02X:%02X ",
-    //                         scanResults[ii].rssi,
-    //                         scanResults[ii].address[0], scanResults[ii].address[1], scanResults[ii].address[2],
-    //                         scanResults[ii].address[3], scanResults[ii].address[4], scanResults[ii].address[5]);
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 
