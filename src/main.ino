@@ -18,7 +18,7 @@ int scanResultsSize = 0;
     *     - BLE_SCAN_TYPE
     *           0x00: Passive scanning, no scan request packets shall be sent.(default)
     *           0x01: Active scanning, scan request packets may be sent.
-    * 
+    *
     *           0x02 - 0xFF: Reserved for future use.
     *     - BLE_SCAN_INTERVAL: This is defined as the time interval from when the Controller started its last LE scan until it begins the subsequent LE scan.
     *           Range: 0x0004 to 0x4000
@@ -59,11 +59,11 @@ void setup() {
     Serial.println("test");
     Particle.publish("setup", PRIVATE);
 
-    Particle.function("doScan", doScan); //bool success = 
+    Particle.function("doScan", doScan); //bool success =
     Particle.function("stopScan", stopScan);
     Particle.function("startScan", startScan);
 
-    
+
 
     Particle.publish("setup_complete", PRIVATE);
 
@@ -99,13 +99,13 @@ double convertToGs(int16_t raw)
 std::unordered_map<std::string, std::string> advert_map;
 
 void scanResultCallback(const BleScanResult *scanResult, void *context) {
-    
+
     uint8_t data[BLE_MAX_ADV_DATA_LEN+10];
     size_t len = scanResult->advertisingData.get(
                 BleAdvertisingDataType::MANUFACTURER_SPECIFIC_DATA,
                 data,
                 BLE_MAX_ADV_DATA_LEN);
-    
+
     if (len == 0) {
         // did not find MANUFACTURER_SPECIFIC_DATA, maybe labeled as SERVICE_DATA
         len = scanResult->advertisingData.get(
@@ -118,10 +118,10 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
         return;
     }
     uint16_t mfgid = data[0] | (data[1] << 8);
-    
+
     if (mfgid == RUUVI_MFCT_UUID) {
         Serial.printlnf("FOUND A RUUVI");
-        
+
         if (advert_map.size() >= 15) {
             Serial.println("OVERFLOW!");
         } else {
@@ -141,7 +141,7 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
             //     pressure_pa += 50000;
             //     double pressure_hpa = pressure_pa/100.0; //hPa
             //     jw.insertKeyValue("pressure_hpa", pressure_hpa);
-                
+
             //     jw.insertKeyValue("accelx_g", convertToGs((data[2+6] << 8)  | data[2+7]));
             //     jw.insertKeyValue("accely_g", convertToGs((data[2+8] << 8)  | data[2+9]));
             //     jw.insertKeyValue("accelz_g", convertToGs((data[2+10] << 8) | data[2+11]));
@@ -170,7 +170,7 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
         // temp_c += (int8_t)data[2+2]; //msb is sign
         // temp_c += (data[2+3]/100.0);
         // Serial.printlnf("  TMP %f C", temp_c);
-    
+
         // uint32_t pressure_pa = (data[2+4] << 8) | data[2+5];
         // pressure_pa += 50000;
         // double pressure_hpa = pressure_pa/100.0; //hPa
@@ -244,13 +244,13 @@ void loop() {
 
     //         Serial.println();
 
-            
+
     //     }
 
     //     scanResultsSize = 0;
     // }
-    
-    
+
+
 
     // for (int ii = 0; ii < count; ii++) {
     //     uint8_t buf[BLE_MAX_ADV_DATA_LEN];
