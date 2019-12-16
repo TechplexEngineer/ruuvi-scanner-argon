@@ -1,6 +1,8 @@
 
 #include "Particle.h"
 #include <unordered_map>
+#include <set>
+#include <iterator>
 #include "Base64RK.h"
 #include "JsonParserGeneratorRK.h"
 
@@ -15,8 +17,9 @@ BleScanResult scanResults[SCAN_RESULT_MAX];
 
 Timer timer(1000 * 1, timer_handler);
 std::unordered_map<std::string, std::string> advert_map;
-std::set<std::string> sentLastTime;
-std::set<std::string> sentTime;
+std::set<std::string> knownBeacons;
+int positionInSet = 0;
+
 
 
 int scanResultsSize = 0;
@@ -140,6 +143,7 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
                 std::string(scanResult->address.toString()),
                 std::string(dat, strlen(dat))
             });
+            knownBeacons.insert(std::string(scanResult->address.toString()));
         }
     }
 }
@@ -153,11 +157,12 @@ int stopScan(String extra) {
 
 
 uint8_t buf[BLE_MAX_ADV_DATA_LEN];
+
 void loop()
 {
 
     int count = 0;
-    const int MAX_ADV_SEND = 3;
+    const int MAX_SEND = 3;
 
     if (isScanning) {
         Serial.println("Starting Scan");
@@ -176,19 +181,29 @@ void loop()
 
         {
             JsonWriterAutoObject obj(&jw);
-            for (const auto &pair : advert_map) {
-                jw.insertKeyValue(pair.first.c_str(), pair.second.c_str());
-                if (++count >= MAX_ADV_SEND) {
-                    break;
-                }
+            for (int i = 0; i < MAX_SEND; ++i)
+            {
+                auto it = std::next(knownBeacons.begin(), positionInSet % knownBeacons.size());
+                std::string bid = *it;
+                auto data = advert_map[bid];
+                jw.insertKeyValue(bid.c_str(), data.c_str());
+                positionInSet++;
             }
+            // for (const auto beaconid : knownBeacons)
+
+            // for (const auto &pair : advert_map) {
+            //     jw.insertKeyValue(pair.first.c_str(), pair.second.c_str());
+            //     if (++count >= MAX_ADV_SEND) {
+            //         break;
+            //     }
+            // }
         }
 
 
         Serial.printlnf("publish  %d", advert_map.size());
         Serial.printlnf(jw.getBuffer());
         Particle.publish("/putney/main/ruuvi", jw.getBuffer(), PRIVATE);
-        advert_map.clear();
+        // advert_map.clear();
     }
 }
 
