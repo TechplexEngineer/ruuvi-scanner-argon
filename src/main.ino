@@ -139,10 +139,22 @@ void scanResultCallback(const BleScanResult *scanResult, void *context) {
                 len ++;
             }
             String dat = Base64::encodeToString(data, len);
-            advert_map.insert({
-                std::string(scanResult->address.toString()),
-                std::string(dat, strlen(dat))
-            });
+
+            auto it = advert_map.find(std::string(scanResult->address.toString()));
+
+            if (it != advert_map.end())
+            {
+                // if key already exists, replace data
+                it -> second = std::string(dat, strlen(dat))
+            }
+            else
+            {
+                // key does not exist, insert new data
+                advert_map.insert({
+                    std::string(scanResult->address.toString()),
+                    std::string(dat, strlen(dat))
+                });
+            }
             knownBeacons.insert(std::string(scanResult->address.toString()));
         }
     }
